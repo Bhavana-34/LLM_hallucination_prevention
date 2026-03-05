@@ -27,7 +27,8 @@ class WikipediaVerifier:
         logger.info(f"Verifying: {entity} ({entity_type})")
         
         # Create search query based on entity type
-        search_query = self._create_search_query(entity, entity_type, fact['sentence'])
+        sentence = fact.get('sentence', '')
+        search_query = self._create_search_query(entity, entity_type, sentence)
         
         # Skip if search query is invalid
         if not search_query or len(search_query.strip()) < 2:
@@ -36,7 +37,9 @@ class WikipediaVerifier:
                 **fact,
                 "verified": False,
                 "confidence": "unknown",
+                "hallucination_type": "UNVERIFIABLE",
                 "wikipedia_url": None,
+                "evidence_snippet": None,
                 "verification_note": "Could not create valid search query"
             }
         
@@ -49,9 +52,11 @@ class WikipediaVerifier:
                 return {
                     **fact,
                     "verified": False,
-                    "confidence": "unknown",
+                    "confidence": "low",
+                    "hallucination_type": "FABRICATED",
                     "wikipedia_url": None,
-                    "verification_note": f"No Wikipedia page found for '{search_query}'"
+                    "evidence_snippet": None,
+                    "verification_note": f"No Wikipedia page found for '{search_query}' — likely fabricated"
                 }
             
             # Get page content
@@ -76,7 +81,9 @@ class WikipediaVerifier:
                 **fact,
                 "verified": False,
                 "confidence": "unknown",
+                "hallucination_type": "UNVERIFIABLE",
                 "wikipedia_url": None,
+                "evidence_snippet": None,
                 "verification_note": f"Error accessing Wikipedia: {str(e)}"
             }
     
@@ -148,19 +155,26 @@ class WikipediaVerifier:
         
         # For different entity types, use different verification strategies
         
+        claim_sentence = fact.get('sentence', '')
+        evidence = self._extract_evidence_snippet(claim_sentence, page_text)
+
         if entity_type in ["GPE", "LOC", "PERSON", "ORG"]:
             # For entities, just check if mentioned
             if entity in page_text or entity in page_summary:
                 return {
                     "verified": True,
                     "confidence": "high",
-                    "verification_note": "Entity found in Wikipedia"
+                    "hallucination_type": "CONFIRMED",
+                    "verification_note": "Entity found in Wikipedia",
+                    "evidence_snippet": evidence
                 }
             else:
                 return {
                     "verified": False,
                     "confidence": "low",
-                    "verification_note": "Entity not found in Wikipedia page"
+                    "hallucination_type": "FABRICATED",
+                    "verification_note": "Entity not found in Wikipedia page",
+                    "evidence_snippet": None
                 }
         
         elif entity_type in ["DATE", "CARDINAL", "QUANTITY", "MEASUREMENT", "POPULATION", "MONEY", "WEIGHT", "TEMPERATURE"]:
@@ -172,7 +186,9 @@ class WikipediaVerifier:
                 return {
                     "verified": True,
                     "confidence": "high",
-                    "verification_note": f"Value '{entity}' found in Wikipedia"
+                    "hallucination_type": "CONFIRMED",
+                    "verification_note": f"Value '{entity}' found in Wikipedia",
+                    "evidence_snippet": evidence
                 }
             
             # Check for similar values (e.g., 14 million vs 14.2 million)
@@ -180,20 +196,26 @@ class WikipediaVerifier:
                 return {
                     "verified": True,
                     "confidence": "medium",
-                    "verification_note": f"Similar value found in Wikipedia"
+                    "hallucination_type": "PARTIALLY_VERIFIED",
+                    "verification_note": f"Similar value found in Wikipedia (minor difference)",
+                    "evidence_snippet": evidence
                 }
             
             return {
                 "verified": False,
                 "confidence": "low",
-                "verification_note": f"Value '{entity}' not found in Wikipedia"
+                "hallucination_type": "NUMERIC_MISMATCH",
+                "verification_note": f"Value '{entity}' not found in Wikipedia — possible numeric hallucination",
+                "evidence_snippet": evidence
             }
         
         # Default: unknown
         return {
             "verified": False,
             "confidence": "unknown",
-            "verification_note": "Could not verify"
+            "hallucination_type": "UNVERIFIABLE",
+            "verification_note": "Could not verify",
+            "evidence_snippet": None
         }
     
     def _check_similar_numbers(self, entity: str, text: str) -> bool:
@@ -223,6 +245,38 @@ class WikipediaVerifier:
             pass
         
         return False
+
+    def _extract_evidence_snippet(self, claim: str, page_text: str) -> Optional[str]:
+        """
+        Find the most relevant sentence from Wikipedia page text
+        that relates to the claim being verified.
+        """
+        if not claim or not page_text:
+            return None
+
+        # Split Wikipedia text into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', page_text[:8000])
+
+        # Get meaningful keywords from the claim (4+ char words)
+        claim_words = set(re.findall(r'\b\w{4,}\b', claim.lower()))
+        if not claim_words:
+            return None
+
+        best_sentence = None
+        best_score = 0
+
+        for sent in sentences:
+            sent = sent.strip()
+            if len(sent) < 20:
+                continue
+            sent_words = set(re.findall(r'\b\w{4,}\b', sent.lower()))
+            score = len(claim_words & sent_words)
+            if score > best_score:
+                best_score = score
+                best_sentence = sent
+
+        # Only return if there's a meaningful overlap
+        return best_sentence[:300] if best_score >= 2 else None
 
 # Create singleton instance
 wikipedia_verifier = WikipediaVerifier()

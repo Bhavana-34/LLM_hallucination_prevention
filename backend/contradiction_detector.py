@@ -4,6 +4,15 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# Load spaCy model for semantic similarity
+try:
+    import spacy
+    _nlp = spacy.load("en_core_web_sm")
+    logger.info("spaCy loaded in contradiction detector")
+except Exception:
+    _nlp = None
+    logger.warning("spaCy not available — falling back to word overlap for similarity")
+
 class ContradictionDetector:
     """Detect contradictions in conversation history"""
     
@@ -181,15 +190,18 @@ class ContradictionDetector:
         return None
     
     def _same_subject(self, sentence1: str, sentence2: str) -> bool:
-        """Check if two sentences are about the same subject"""
-        # Extract first few words (usually the subject)
+        """Check if two sentences are about the same subject using spaCy similarity"""
+        if _nlp:
+            try:
+                doc1 = _nlp(sentence1[:200])
+                doc2 = _nlp(sentence2[:200])
+                return doc1.similarity(doc2) > 0.65
+            except Exception:
+                pass
+        # Fallback: word overlap on first 5 words
         words1 = sentence1.lower().split()[:5]
         words2 = sentence2.lower().split()[:5]
-        
-        # Check for overlap
         common = set(words1) & set(words2)
-        
-        # If at least 2 significant words overlap, likely same subject
         return len(common) >= 2
     
     def _extract_is_statement(self, sentence: str) -> Optional[tuple]:
@@ -201,14 +213,19 @@ class ContradictionDetector:
         return None
     
     def _similar_text(self, text1: str, text2: str) -> bool:
-        """Check if two texts are similar"""
-        # Simple word overlap check
+        """Check if two texts are semantically similar using spaCy"""
+        if _nlp:
+            try:
+                doc1 = _nlp(text1[:200])
+                doc2 = _nlp(text2[:200])
+                return doc1.similarity(doc2) > 0.75
+            except Exception:
+                pass
+        # Fallback: word overlap
         words1 = set(text1.lower().split())
         words2 = set(text2.lower().split())
-        
         if not words1 or not words2:
             return False
-        
         overlap = len(words1 & words2) / min(len(words1), len(words2))
         return overlap > 0.5
     

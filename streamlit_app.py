@@ -250,13 +250,30 @@ if verify_button and query:
                     else:
                         color_class = 'fact-orange'
                         emoji = '❓'
-                    
+
+                    # Hallucination type badge
+                    h_type = fact.get('hallucination_type', '')
+                    type_badge_colors = {
+                        'CONFIRMED': '#28a745',
+                        'PARTIALLY_VERIFIED': '#ffc107',
+                        'NUMERIC_MISMATCH': '#fd7e14',
+                        'FABRICATED': '#dc3545',
+                        'UNVERIFIABLE': '#6c757d',
+                    }
+                    badge_color = type_badge_colors.get(h_type, '#6c757d')
+                    badge_html = f"<span style='background:{badge_color};color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold'>{h_type}</span>" if h_type else ""
+
+                    # Evidence snippet
+                    evidence = fact.get('evidence_snippet')
+                    evidence_html = f"<br><small>📄 <em>Wikipedia says:</em> \"{evidence}\"</small>" if evidence else ""
+
                     with st.container():
                         st.markdown(f"""
                         <div class="{color_class}">
-                            <strong>{emoji} {fact['entity']}</strong><br>
+                            <strong>{emoji} {fact['entity']}</strong> &nbsp; {badge_html}<br>
                             <small>Type: {fact['entity_type']} | Confidence: {fact.get('confidence', 'unknown')}</small><br>
                             <small>{fact.get('verification_note', 'No note')}</small>
+                            {evidence_html}
                             {f"<br><a href='{fact.get('wikipedia_url')}' target='_blank'>📖 View on Wikipedia →</a>" if fact.get('wikipedia_url') else ''}
                         </div>
                         """, unsafe_allow_html=True)
