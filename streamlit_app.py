@@ -11,7 +11,7 @@ from refdatabase import wikipedia_verifier
 from confidence_scorer import confidence_scorer
 from contradiction_detector import contradiction_detector, divergence_checker
 from response_formatter import response_formatter
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 import uuid
 
@@ -19,10 +19,8 @@ import uuid
 env_path = os.path.join(backend_path, '.env')
 load_dotenv(env_path)
 
-# Configure Gemini
-
-genai.configure(api_key = st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-flash-latest')
+# Configure Groq
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # Page config
 st.set_page_config(
@@ -123,22 +121,20 @@ if verify_button and query:
             # Add user message to history
             st.session_state.conversation_history.append({
                 "role": "user",
-                "parts": [query]
+                "content": query
             })
             
-            # Create chat with history
-            chat = model.start_chat(
-                history=st.session_state.conversation_history[:-1]
+            # Get response from Groq
+            response = client.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=st.session_state.conversation_history
             )
-            
-            # Get response
-            response = chat.send_message(query)
-            response_text = response.text
+            response_text = response.choices[0].message.content
             
             # Add assistant response to history
             st.session_state.conversation_history.append({
-                "role": "model",
-                "parts": [response_text]
+                "role": "assistant",
+                "content": response_text
             })
             
             # Check divergence
@@ -278,6 +274,6 @@ elif verify_button and not query:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: white; padding: 20px;'>
-    <small>Built by Soumyashis Sarkar | Powered by Gemini & Wikipedia (as database of reference)</small>
+    <small>Built by Soumyashis Sarkar | Powered by Groq (LLaMA3) & Wikipedia (as database of reference)</small>
 </div>
 """, unsafe_allow_html=True)
