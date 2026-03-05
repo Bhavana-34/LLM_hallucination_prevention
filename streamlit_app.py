@@ -9,7 +9,7 @@ sys.path.insert(0, backend_path)
 from fact_extract import fact_extractor
 from refdatabase import wikipedia_verifier
 from confidence_scorer import confidence_scorer
-from contradiction_detector import contradiction_detector
+from contradiction_detector import contradiction_detector, divergence_checker
 from response_formatter import response_formatter
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -90,6 +90,8 @@ with st.sidebar:
     - 🔍 Verifies them against Wikipedia
     - 🎯 Scores confidence levels
     - ⚠️ Detects contradictions
+    - 📈 Checks response divergence
+    - 🚨 Computes Hallucination Risk Score
     """)
     
     st.divider()
@@ -139,6 +141,10 @@ if verify_button and query:
                 "parts": [response_text]
             })
             
+            # Check divergence
+            divergence = divergence_checker.check_divergence(st.session_state.session_id, response_text)
+            divergence_checker.add_response(st.session_state.session_id, response_text)
+
             # Extract facts
             extracted_facts = fact_extractor.extract_facts(response_text)
             
@@ -161,6 +167,9 @@ if verify_button and query:
                 confidence_report['color'] = 'red'
                 confidence_report['emoji'] = '🔴'
                 confidence_report['summary'] = f"⚠️ {len(contradictions)} contradiction(s) detected"
+
+            # Compute hallucination risk score
+            hallucination_risk = confidence_scorer.compute_risk_score(confidence_report, contradictions, divergence)
             
             # Format response
             formatted_response = response_formatter.format_response(
@@ -171,7 +180,21 @@ if verify_button and query:
             
             # Display results
             st.divider()
-            
+
+            # --- Hallucination Risk Score (prominent) ---
+            risk = hallucination_risk
+            st.markdown(f"## {risk['emoji']} Hallucination Risk: **{risk['risk_level'].upper()}** &nbsp; `{risk['risk_score']}/100`")
+            risk_col1, risk_col2, risk_col3 = st.columns(3)
+            risk_col1.metric("Confidence Risk", f"{risk['breakdown']['confidence_risk']}/40")
+            risk_col2.metric("Contradiction Risk", f"{risk['breakdown']['contradiction_risk']}/40")
+            risk_col3.metric("Divergence Risk", f"{risk['breakdown']['divergence_risk']}/20")
+            st.progress(int(risk['risk_score']), text=risk['label'])
+            st.divider()
+
+            # Divergence warning
+            if divergence.get('diverged'):
+                st.warning(f"↗️ **Response Divergence Detected** — similarity to previous turn: `{divergence['similarity_score']}` (severity: {divergence.get('severity', 'unknown')})")
+
             # Contradictions warning
             if contradictions:
                 st.error("⚠️ **Contradictions Detected!**")

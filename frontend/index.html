@@ -282,6 +282,40 @@
             margin-bottom: 10px;
         }
 
+        .risk-banner {
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .risk-progress {
+            width: 100%;
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+            height: 12px;
+            margin-top: 8px;
+        }
+
+        .risk-progress-bar {
+            height: 12px;
+            border-radius: 10px;
+            background: white;
+            transition: width 0.6s ease;
+        }
+
+        .divergence-alert {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
         @media (max-width: 968px) {
             .comparison-grid {
                 grid-template-columns: 1fr;
@@ -318,6 +352,12 @@
 
         <!-- Results Section -->
         <div class="results-section" id="results">
+            <!-- Hallucination Risk Score -->
+            <div id="riskBanner"></div>
+
+            <!-- Divergence Alert -->
+            <div id="divergenceAlert" style="display:none;"></div>
+
             <!-- Contradictions (if any) -->
             <div id="contradictionsPanel" style="display: none;"></div>
 
@@ -407,8 +447,21 @@
         }
 
         function displayResults(data) {
-            // Show results section
             document.getElementById('results').classList.add('active');
+
+            // Display hallucination risk score
+            if (data.hallucination_risk && data.hallucination_risk.risk_score !== undefined) {
+                displayRiskBanner(data.hallucination_risk);
+            }
+
+            // Display divergence alert
+            const divAlert = document.getElementById('divergenceAlert');
+            if (data.divergence && data.divergence.diverged) {
+                divAlert.style.display = 'block';
+                divAlert.innerHTML = `⬆️ <strong>Response Divergence Detected</strong> — similarity to previous turn: <code>${data.divergence.similarity_score}</code> (severity: ${data.divergence.severity})`;
+            } else {
+                divAlert.style.display = 'none';
+            }
 
             // Display contradictions if any
             if (data.contradictions && data.contradictions.length > 0) {
@@ -431,6 +484,22 @@
 
             // Scroll to results
             document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayRiskBanner(risk) {
+            const colors = { low: '#28a745', medium: '#ffc107', high: '#fd7e14', critical: '#dc3545' };
+            const bg = colors[risk.risk_level] || '#667eea';
+            const banner = document.getElementById('riskBanner');
+            banner.innerHTML = `
+                <div class="risk-banner" style="background: ${bg};">
+                    <div>
+                        <h2 style="margin:0;">${risk.emoji} Hallucination Risk: ${risk.risk_level.toUpperCase()}</h2>
+                        <small>${risk.label}</small>
+                        <div class="risk-progress"><div class="risk-progress-bar" style="width:${risk.risk_score}%"></div></div>
+                    </div>
+                    <div style="text-align:right; font-size:2.5rem; font-weight:bold;">${risk.risk_score}<small style="font-size:1rem;">/100</small></div>
+                </div>
+            `;
         }
 
         function displayConfidenceBanner(report) {

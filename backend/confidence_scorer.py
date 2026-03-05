@@ -153,5 +153,51 @@ class ConfidenceScorer:
             "contradicted": contradicted
         }
 
+    def compute_risk_score(self, confidence_report: Dict, contradictions: List[Dict], divergence: Dict) -> Dict:
+        """
+        Compute a composite Hallucination Risk Score (0–100).
+        Higher = more likely the response contains hallucinations.
+
+        Weights:
+          40 pts  — low confidence (inverted confidence_score)
+          40 pts  — contradictions (capped at 3 contradictions = max)
+          20 pts  — response divergence
+        """
+        # Component 1: confidence (0-40)
+        conf_score = confidence_report.get('confidence_score', 0.0)
+        confidence_risk = (1.0 - conf_score) * 40
+
+        # Component 2: contradictions (0-40), capped at 3
+        n_contradictions = min(len(contradictions), 3)
+        contradiction_risk = (n_contradictions / 3) * 40
+
+        # Component 3: divergence (0-20)
+        div_score = divergence.get('similarity_score', 1.0) if divergence else 1.0
+        divergence_risk = (1.0 - div_score) * 20 if divergence.get('diverged') else 0
+
+        total_risk = round(confidence_risk + contradiction_risk + divergence_risk, 1)
+
+        if total_risk >= 70:
+            level, emoji, color = "critical", "🚨", "red"
+        elif total_risk >= 45:
+            level, emoji, color = "high", "🔴", "orange"
+        elif total_risk >= 25:
+            level, emoji, color = "medium", "🟡", "yellow"
+        else:
+            level, emoji, color = "low", "🟢", "green"
+
+        return {
+            "risk_score": total_risk,
+            "risk_level": level,
+            "emoji": emoji,
+            "color": color,
+            "breakdown": {
+                "confidence_risk": round(confidence_risk, 1),
+                "contradiction_risk": round(contradiction_risk, 1),
+                "divergence_risk": round(divergence_risk, 1),
+            },
+            "label": f"{emoji} {level.upper()} hallucination risk ({total_risk}/100)"
+        }
+
 # Create singleton instance
 confidence_scorer = ConfidenceScorer()

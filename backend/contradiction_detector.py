@@ -231,3 +231,55 @@ class ContradictionDetector:
 
 # Create singleton instance
 contradiction_detector = ContradictionDetector()
+
+
+class DivergenceChecker:
+    """Detect when LLM responses diverge significantly from previous responses on the same topic."""
+
+    def __init__(self, threshold: float = 0.25):
+        self.session_responses: Dict[str, List[str]] = {}
+        self.threshold = threshold  # cosine similarity below this → diverged
+
+    def add_response(self, session_id: str, text: str):
+        self.session_responses.setdefault(session_id, []).append(text)
+
+    def check_divergence(self, session_id: str, new_text: str) -> Dict:
+        history = self.session_responses.get(session_id)
+        if not history:
+            return {"diverged": False, "similarity_score": 1.0, "message": None}
+
+        score = self._cosine_similarity(new_text, history[-1])
+        diverged = score < self.threshold
+        return {
+            "diverged": diverged,
+            "similarity_score": round(score, 3),
+            "severity": "high" if score < 0.1 else "medium" if score < 0.2 else "low",
+            "message": (
+                f"Response diverged from previous turn (similarity: {score:.2f})"
+                if diverged else None
+            ),
+        }
+
+    def _cosine_similarity(self, text1: str, text2: str) -> float:
+        stopwords = {'the','a','an','is','are','was','were','in','on','at','to','for','of','and','or','but','it','this','that'}
+        def vectorize(t):
+            words = [w for w in re.findall(r'\w+', t.lower()) if w not in stopwords]
+            freq: Dict[str, int] = {}
+            for w in words:
+                freq[w] = freq.get(w, 0) + 1
+            return freq
+
+        v1, v2 = vectorize(text1), vectorize(text2)
+        vocab = set(v1) | set(v2)
+        if not vocab:
+            return 1.0
+        dot = sum(v1.get(w, 0) * v2.get(w, 0) for w in vocab)
+        mag1 = sum(x ** 2 for x in v1.values()) ** 0.5
+        mag2 = sum(x ** 2 for x in v2.values()) ** 0.5
+        return dot / (mag1 * mag2) if mag1 and mag2 else 0.0
+
+    def clear_session(self, session_id: str):
+        self.session_responses.pop(session_id, None)
+
+
+divergence_checker = DivergenceChecker()
