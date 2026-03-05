@@ -35,7 +35,7 @@ app.add_middleware(
 
 # Configure Groq client
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")  # Override via .env if needed
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # Override via .env if needed
 
 # In-memory conversation storage
 # Groq uses OpenAI-style messages: {"role": "user"/"assistant"/"system", "content": "..."}

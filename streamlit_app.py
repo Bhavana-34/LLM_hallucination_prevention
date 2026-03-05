@@ -126,7 +126,7 @@ if verify_button and query:
             
             # Get response from Groq
             response = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile",
                 messages=st.session_state.conversation_history
             )
             response_text = response.choices[0].message.content
